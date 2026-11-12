@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.0.1
+- A fül saját görgetősávot kap: a MeshCentral eszközpanelje levágta a hosszú találati listát. A magasság az ablakhoz igazodik (átméretezéskor is).
+
 ## 2.0.0
 Teljes újraírás. A korábbi verzió nem működött, és a mellette használt pluginokat (pl. cfgcheck) is elrontotta.
 
