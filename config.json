@@ -1,0 +1,18 @@
+{
+  "name": "Network Scanner",
+  "shortName": "networkscanner",
+  "version": "1.2.0",
+  "author": "Geresics Gábor",
+  "description": "IPv4 hálózati eszközfelderítés a kiválasztott Windows vagy Linux Mesh Agent hálózatából.",
+  "hasAdminPanel": false,
+  "homepage": "https://github.com/geresicsg/meshcentral-network-scanner",
+  "changelogUrl": "https://raw.githubusercontent.com/geresicsg/meshcentral-network-scanner/main/changelog.md",
+  "configUrl": "https://raw.githubusercontent.com/geresicsg/meshcentral-network-scanner/main/config.json",
+  "downloadUrl": "https://github.com/geresicsg/meshcentral-network-scanner/archive/refs/heads/main.zip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geresicsg/meshcentral-network-scanner.git"
+  },
+  "versionHistoryUrl": "https://api.github.com/repos/geresicsg/meshcentral-network-scanner/tags",
+  "meshCentralCompat": ">=1.0.0"
+}
