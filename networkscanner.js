@@ -13,7 +13,7 @@ module.exports.networkscanner = function (parent) {
         'onWebUIStartupEnd', 'onDeviceRefreshEnd', 'esc',
         'windowsInterfaceScript', 'linuxInterfaceScript',
         'windowsScanScript', 'linuxScanScript',
-        'ipToNumber', 'numberToIp', 'makeChunks', 'sendScanChunk', 'finishScan',
+        'ipToNumber', 'numberToIp', 'makeChunks', 'queueRunCommand', 'sendScanChunk', 'finishScan',
         'loadInterfaces', 'startScan', 'onResult', 'renderResults', 'getVendor'
     ];
 
@@ -24,11 +24,17 @@ module.exports.networkscanner = function (parent) {
         meshserver._networkScannerHooked = true;
         var orig = meshserver.onMessage;
         meshserver.onMessage = function (server, message) {
-            if (message &&
-                (message.action === 'runcommands' || (message.action === 'msg' && message.type === 'runcommands')) &&
-                typeof message.responseid === 'string' &&
-                message.responseid.indexOf('networkscanner:') === 0) {
-                try { pluginHandler.networkscanner.onResult(message); }
+            // MeshCentral UI versions differ: onMessage may receive either
+            // (server, message) or just (message). Normalize both forms.
+            var msg = message;
+            if ((!msg || typeof msg !== 'object') && server && typeof server === 'object') {
+                msg = server;
+            }
+            if (msg &&
+                (msg.action === 'runcommands' || (msg.action === 'msg' && msg.type === 'runcommands')) &&
+                typeof msg.responseid === 'string' &&
+                msg.responseid.indexOf('networkscanner:') === 0) {
+                try { pluginHandler.networkscanner.onResult(msg); }
                 catch (ex) { console.log('Network Scanner hiba:', ex); }
                 return;
             }
@@ -193,6 +199,39 @@ module.exports.networkscanner = function (parent) {
         ].join('\n');
     };
 
+    // MeshCentral agents accept only one runcommands request at a time.
+    // Serialize interface discovery and scan chunks per agent to avoid the
+    // 'Run commands can't execute, already busy' response.
+    obj.queueRunCommand = function (nodeid, message, rid, timeoutMs, onTimeout) {
+        var h = pluginHandler.networkscanner;
+        h.commandQueues = h.commandQueues || {};
+        var q = h.commandQueues[nodeid] || (h.commandQueues[nodeid] = { active: false, jobs: [] });
+        q.jobs.push({ message: message, rid: rid, timeoutMs: timeoutMs, onTimeout: onTimeout });
+        function pump() {
+            if (q.active || q.jobs.length === 0) return;
+            var job = q.jobs.shift();
+            q.active = true;
+            var pending = h.pending[job.rid];
+            if (pending) pending.timer = setTimeout(function () {
+                if (h.pending[job.rid]) {
+                    delete h.pending[job.rid];
+                    q.active = false;
+                    if (job.onTimeout) job.onTimeout();
+                    pump();
+                }
+            }, job.timeoutMs);
+            meshserver.send(job.message);
+        }
+        q.pump = pump;
+        pump();
+    };
+
+    obj.releaseRunCommand = function (nodeid) {
+        var h = pluginHandler.networkscanner;
+        var q = h.commandQueues && h.commandQueues[nodeid];
+        if (q) { q.active = false; q.pump(); }
+    };
+
     obj.loadInterfaces = function () {
         if (!currentNode || (currentNode.conn & 1) === 0) {
             var s = Q('nsStatus'); if (s) s.textContent = 'Az agent nem kapcsolódik.'; return;
@@ -202,15 +241,16 @@ module.exports.networkscanner = function (parent) {
         var isUnix = !isWin;
         var h = pluginHandler.networkscanner;
         h.pending = h.pending || {};
+        if (Object.keys(h.pending).some(function (k) { return h.pending[k].kind === 'interfaces' && h.pending[k].nodeid === node._id; })) return;
         var rid = 'networkscanner:if:' + node._id + ':' + Date.now();
-        h.pending[rid] = { kind: 'interfaces', nodeid: node._id, timer: setTimeout(function () {
-            if (h.pending[rid]) { delete h.pending[rid]; var st = Q('nsStatus'); if (st) st.textContent = 'Interfész-lekérdezés időtúllépés.'; }
-        }, 20000) };
+        h.pending[rid] = { kind: 'interfaces', nodeid: node._id };
         var st = Q('nsStatus'); if (st) st.textContent = 'Hálózati interfészek lekérdezése...';
-        meshserver.send({
+        h.queueRunCommand(node._id, {
             action: 'runcommands', nodeids: [node._id], type: isWin ? 2 : 3,
             cmds: isWin ? h.windowsInterfaceScript() : h.linuxInterfaceScript(),
             runAsUser: 0, reply: true, responseid: rid
+        }, rid, 30000, function () {
+            var status = Q('nsStatus'); if (status) status.textContent = 'Interfész-lekérdezés időtúllépés.';
         });
     };
 
@@ -262,25 +302,19 @@ module.exports.networkscanner = function (parent) {
         }
         var rid = scan.id + ':' + scan.index;
         var chunk = scan.chunks[scan.index];
-        h.pending[rid] = {
-            kind: 'scanChunk', scan: scan,
-            timer: setTimeout(function () {
-                if (h.pending[rid]) {
-                    delete h.pending[rid];
-                    scan.error = 'Időtúllépés ennél a rész-tartománynál: ' + chunk;
-                    scan.cancelled = true;
-                    h.finishScan(scan);
-                }
-            }, 90000)
-        };
+        h.pending[rid] = { kind: 'scanChunk', scan: scan, nodeid: scan.nodeid };
         var pct = Math.floor((scan.done / scan.total) * 100);
         var st = Q('nsStatus'), txt = Q('nsProgressText');
         if (st) st.textContent = 'Vizsgálat: ' + chunk + ' (' + (scan.index + 1) + '/' + scan.chunks.length + ')';
         if (txt) txt.textContent = pct + '% — ' + scan.done + ' / ' + scan.total + ' cím';
-        meshserver.send({
+        h.queueRunCommand(scan.nodeid, {
             action: 'runcommands', nodeids: [scan.nodeid], type: scan.isWin ? 2 : 3,
             cmds: scan.isWin ? h.windowsScanScript(chunk, scan.ports) : h.linuxScanScript(chunk, scan.ports),
             runAsUser: 0, reply: true, responseid: rid
+        }, rid, 120000, function () {
+            scan.error = 'Időtúllépés ennél a rész-tartománynál: ' + chunk;
+            scan.cancelled = true;
+            h.finishScan(scan);
         });
     };
 
@@ -397,6 +431,7 @@ module.exports.networkscanner = function (parent) {
         var p = h.pending ? h.pending[message.responseid] : null;
         if (!p) return;
         clearTimeout(p.timer);
+        h.releaseRunCommand(p.nodeid || (p.scan && p.scan.nodeid));
         delete h.pending[message.responseid];
         var result = (typeof message.result === 'string') ? message.result : '';
         if (p.kind === 'interfaces') {

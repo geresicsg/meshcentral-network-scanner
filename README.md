@@ -1,4 +1,4 @@
-# MeshCentral Network Scanner 1.1.0
+# MeshCentral Network Scanner 1.2.1
 
 A kiválasztott MeshCentral agent hálózatát vizsgálja. A vizsgálat az agent gépén fut, nem a MeshCentral szerveren.
 
@@ -67,3 +67,8 @@ A plugin lekérdezéseket végez; nem módosít hálózati konfigurációt, nem 
 - A csomag egy beépített, gyakori gyártókat tartalmazó OUI-listát használ; ez nem a teljes, naponta frissülő IEEE adatbázis. Ismeretlen prefix esetén „Ismeretlen OUI” látszik.
 - A keresés 128 címes blokkokra van bontva. Minden blokk befejezésekor frissül a százalékos folyamatjelző és a találatok száma.
 - A részletekre bontás miatt a keresés közben a felület tényleges előrehaladást tud mutatni.
+
+
+## 1.2.1 – Válaszkezelési javítás
+
+A WebSocket üzenetkezelő mindkét gyakori MeshCentral callback-aláírást kezeli: `(server, message)` és `(message)`. A plugin a `runcommands` közvetlen válaszát, valamint az agent `msg/runcommands` válaszát is felismeri.
