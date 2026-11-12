@@ -1,74 +1,48 @@
-# MeshCentral Network Scanner 1.2.1
+# MeshCentral Network Scanner 2.0.0
 
 A kiválasztott MeshCentral agent hálózatát vizsgálja. A vizsgálat az agent gépén fut, nem a MeshCentral szerveren.
 
 ## Támogatott platformok
 
-- Windows agent: PowerShell, MeshCentral `runcommands` type `2`.
-- Linux agent: shell + Python 3 standard library, MeshCentral `runcommands` type `3`.
-- A Linux oldali interfészlista az `ip` (iproute2) parancsot használja.
-- Linux oldalon nincs szükség pip csomagra vagy külön telepített scannerre; Python 3 és iproute2 szükséges.
+- **Windows agent**: Windows PowerShell 5.x (Windows 8 / Server 2012 vagy újabb, illetve WMF 5), `runcommands` type `2`.
+- **Linux / macOS agent**: `sh` + Python 3 (csak standard library), `runcommands` type `3`. Az interfészlistához `ip` (iproute2) vagy `ifconfig` kell.
 
 ## Funkciók
 
-- Az agent IPv4 hálózati interfészeinek listázása, automatikus tartományajánlással.
-- Egyéni CIDR tartomány (például `10.151.10.0/24`) vagy kezdő-vég IP (például `10.151.10.1-10.151.10.254`) megadása.
-- ICMP ping és gyakori TCP portok párhuzamos ellenőrzése Linuxon; Windows alatt ICMP és TCP portvizsgálat.
-- IP-cím, reverse DNS/gépnév, MAC-cím (helyi neighbor/ARP cache alapján) és nyitott TCP portok megjelenítése.
-- A találatok agentenként megmaradnak a plugin felületén, amíg az oldal újra nem töltődik.
+- Az agent IPv4 interfészeinek listázása, tartományajánlással (a fül első megnyitásakor automatikusan, utána gombra).
+- Saját tartomány: CIDR (`10.151.10.0/24`), kezdő-vég (`10.151.10.1-10.151.10.254`), rövidített vég (`10.151.10.1-254`) vagy egyetlen IP.
+- Párhuzamos ICMP ping, gyakori TCP portok és reverse DNS.
+- MAC-cím a neighbor/ARP táblából, gyártó (beépített, rövid OUI-lista), helyi/véletlen MAC jelölése.
+- ARP-alapú észlelés: a pingre nem válaszoló (tűzfalazott) helyi gépek is megjelennek.
+- Élő találatlista és folyamatjelző, Leállítás gomb, CSV export.
+- Az eredmény eszközönként megmarad, amíg az oldal újra nem töltődik.
+
+## Együttműködés más pluginekkel
+
+A Mesh Agent egyszerre csak egy `runcommands` parancsot futtat; ha közben újabb érkezik, azt válasz nélkül eldobja. A plugin ezért a böngészőben egy közös, agentenkénti sort tart fenn, amelyen a többi plugin (pl. cfgcheck) válaszkérő (`reply: true`) parancsai is átmennek, elsőbbséggel. Így egy futó hálózatvizsgálat közben is használható a cfgcheck: a kérése a soron következő rész-vizsgálat előtt fut le.
+
+Ha az agent mégis foglalt (például egy másik böngészőből indított parancs fut), a plugin ezt felismeri és néhányszor újrapróbálkozik.
 
 ## Vizsgált TCP portok
 
-`21, 22, 23, 80, 443, 445, 502, 3389, 8080, 8443, 11740`
-
-A portellenőrzés opcionális, a jelölőnégyzettel kikapcsolható. Ez nem teljes portscan, csak a felsorolt TCP portokat ellenőrzi.
+`21, 22, 23, 80, 443, 445, 502, 3389, 8080, 8443, 11740` — a jelölőnégyzettel kikapcsolható. Ez nem teljes portscan.
 
 ## Telepítés
 
 A MeshCentral konfigurációban legyen engedélyezve a pluginrendszer:
 
 ```json
-{
-  "plugins": {
-    "enabled": true
-  }
-}
+{ "plugins": { "enabled": true } }
 ```
 
-Ezután a MeshCentral admin felületén: **My Server → Plugins → Download plugin**, majd a `config.json` raw GitHub URL-je.
+Ezután: **My Server → Plugins → Download plugin**, majd a `config.json` raw GitHub URL-je. Frissítés után a böngészőben töltsd újra az oldalt (Ctrl+F5).
 
-## Használat
+## Korlátok
 
-1. Nyisd meg a Windows vagy Linux agent eszközoldalát.
-2. Válaszd a **Network Scanner** fület.
-3. Az interfészlista automatikusan betöltődik.
-4. Válassz egy felajánlott hálózati tartományt, vagy add meg a sajátodat.
-5. Indítsd el a vizsgálatot.
-
-## Korlátok és megjegyzések
-
-- A Linux agenten Python 3 és `ip` (iproute2) szükséges.
-- Linuxon a TCP ellenőrzés a Python standard library socket funkcióját használja; nem igényel `nmap`, `nc` vagy `fping` telepítést.
-- A MAC-cím csak akkor jelenik meg, ha az agent neighbor/ARP táblájában elérhető.
-- Routeren túli eszközöknél a MAC-cím általában nem kérdezhető le.
-- Linuxon az ICMP-t tiltó eszközök is megjelenhetnek, ha valamelyik vizsgált TCP portjuk nyitott. Windows alatt az első verzió a TCP portokat a pingre válaszoló címeken ellenőrzi.
-- Legfeljebb 4094 címet vizsgál. Nagyobb hálózatokhoz kisebb alhálózatokra kell bontani.
-- A Windows verzió PowerShell `Start-Job` feladatokat használ az ICMP felderítéshez, ezért nagyobb tartományoknál több erőforrást vehet igénybe.
-- A MeshCentral `runcommands` jogosultság szükséges a felhasználónak.
+- Legfeljebb 4094 cím vizsgálatonként (Windows alatt 64, Linuxon 128 címes részletekben).
+- A MAC-cím és az ARP-alapú észlelés csak az agent saját alhálózatában működik.
+- A felhasználónak „Run commands” (MESHRIGHT_REMOTECOMMAND) jogosultság kell.
 
 ## Biztonság
 
-A plugin lekérdezéseket végez; nem módosít hálózati konfigurációt, nem telepít szoftvert a célgépekre. Csak olyan hálózatot vizsgálj, amelynek felderítésére jogosult vagy.
-
-
-## 1.2.0 – OUI és folyamatjelző
-
-- A MAC-cím első 24 bitje (OUI) alapján helyi gyártó-hozzárendelés jelenik meg.
-- A csomag egy beépített, gyakori gyártókat tartalmazó OUI-listát használ; ez nem a teljes, naponta frissülő IEEE adatbázis. Ismeretlen prefix esetén „Ismeretlen OUI” látszik.
-- A keresés 128 címes blokkokra van bontva. Minden blokk befejezésekor frissül a százalékos folyamatjelző és a találatok száma.
-- A részletekre bontás miatt a keresés közben a felület tényleges előrehaladást tud mutatni.
-
-
-## 1.2.1 – Válaszkezelési javítás
-
-A WebSocket üzenetkezelő mindkét gyakori MeshCentral callback-aláírást kezeli: `(server, message)` és `(message)`. A plugin a `runcommands` közvetlen válaszát, valamint az agent `msg/runcommands` válaszát is felismeri.
+A plugin csak lekérdez; nem módosít hálózati konfigurációt és nem telepít semmit. Csak olyan hálózatot vizsgálj, amelyre jogosult vagy.

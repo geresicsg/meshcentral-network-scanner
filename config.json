@@ -1,7 +1,7 @@
 {
   "name": "Network Scanner",
   "shortName": "networkscanner",
-  "version": "1.2.2",
+  "version": "2.0.0",
   "author": "Geresics Gábor",
   "description": "IPv4 hálózati eszközfelderítés a kiválasztott Windows vagy Linux Mesh Agent hálózatából.",
   "hasAdminPanel": false,

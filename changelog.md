@@ -1,27 +1,34 @@
 # Changelog
 
-## 1.2.2
-- Agentenkénti parancssor: egyszerre csak egy `runcommands` kérés fut, így az interfészlekérdezés és a vizsgálat nem ütközik a MeshCentral „already busy” korlátozásába.
-- A részvizsgálatok és az interfészlekérdezés egymás után indulnak; időtúllépéskor a sor továbblép.
-- Ismételt interfészlekérdezés nem indít párhuzamos azonos kérést.
+## 2.0.0
+Teljes újraírás. A korábbi verzió nem működött, és a mellette használt pluginokat (pl. cfgcheck) is elrontotta.
 
+Javított hibák:
+- A `releaseRunCommand` és az OUI-tábla nem volt exportálva a böngészőnek, ezért minden agentválasz feldolgozása kivétellel leállt: az interfészlista nem töltődött be, a vizsgálat 0%-on állt.
+- A plugin az eszközoldal minden megnyitásakor és frissítésekor magától `runcommands` kérést küldött az agentnek. Az agent egyszerre csak egy parancsot futtat, a többit szó nélkül eldobja („already busy”), ezért a cfgcheck kérései időtúllépéssel elbuktak.
+- A Windows PowerShell scriptek többsoros utasításokat tartalmaztak, amit az agent stdin-alapú (`-command -`) futtatása nem kezel megbízhatóan.
+
+Új működés:
+- Közös, agentenkénti parancssor a böngészőben: a saját kérések ÉS a többi plugin válaszkérő (`reply: true`) `runcommands` kérései is ezen mennek át, így nem ütik ki egymást. A más pluginek kérései elsőbbséget kapnak.
+- „Agent foglalt” felismerése és automatikus újrapróbálás (pl. ha egy másik böngészőből indított parancs fut).
+- Az eszközfrissítéskor nem megy parancs az agentnek; az interfészek csak a fül megnyitásakor (eszközönként egyszer) vagy gombra kérdeződnek le.
+- Az állapot (interfészek, futó vizsgálat, eredmény) eszközönként megmarad, a MeshCentral fül-újraépítései nem szakítják meg a vizsgálatot.
+- Windows: a script base64-ben, rövid önálló sorokban megy át, párhuzamos ICMP + TCP + reverse DNS, MAC és ARP-alapú észlelés (a pingre nem válaszoló helyi gépek is látszanak).
+- Linux/macOS: Python 3 alapú párhuzamos vizsgálat, `ip neigh` / `arp -an` / `/proc/net/arp` MAC-forrás; `ifconfig` tartalék az interfészlistához.
+- Élő találatlista vizsgálat közben, Leállítás gomb, CSV export, „Észlelés” oszlop (ping / tcp / arp), az agent saját címének jelölése.
+- Rövidített tartomány megadása is működik (pl. `10.0.0.1-254`), /20-nál nagyobb hálózatú interfésznél a saját /24 kerül felajánlásra.
+
+## 1.2.2
+- Agentenkénti parancssor (hibás: a felszabadító függvény nem volt exportálva).
 
 ## 1.2.1
-- Javítva a MeshCentral WebSocket válaszkezelése: a plugin kezeli az egy- és kétparaméteres `onMessage` hívásokat is.
-- A `runcommands` és az agenttől visszaérkező `msg/runcommands` válaszok egységes feldolgozása.
-- Ez javítja az interfészlista időtúllépését és a vizsgálat 0%-on maradását, amennyiben a környezetben az eltérő callback-aláírás okozta a hibát.
+- A MeshCentral WebSocket válaszkezelés egységesítése.
 
 ## 1.2.0
-- MAC-cím OUI alapján gyártófelismerés beépítve (helyi ismert OUI-adatbázis).
-- Folyamatjelző: a vizsgálat 128 címes részletekben fut, a kezelőfelület minden rész után frissíti a százalékot és a találatok számát.
-- A részletek külön agent-parancsokként futnak, így a felület nem csak egy indeterminate forgó ikont mutat.
+- MAC-cím OUI alapján gyártófelismerés, folyamatjelző 128 címes részletekkel.
 
 ## 1.1.0
-- Linux agent támogatás (MeshCentral runcommands type 3).
-- Linux interfészfelderítés az iproute2 `ip` parancsával.
-- Linux hálózati vizsgálat Python 3 standard library használatával.
-- ICMP-t nem válaszoló, de vizsgált TCP porton elérhető eszközök felderítése.
-- Windows és Linux agenttípus szétválasztása.
+- Linux agent támogatás (runcommands type 3, Python 3).
 
 ## 1.0.0
 - Első Windows verzió.
