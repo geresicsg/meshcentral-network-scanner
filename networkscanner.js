@@ -69,6 +69,7 @@ module.exports.networkscanner = function (parent) {
             }
             if (meshserver._networkScannerInstalled) return;
             meshserver._networkScannerInstalled = true;
+            window.addEventListener('resize', function () { try { h.fitHeight(); } catch (ex) { } });
             h.queues = h.queues || {};
             h.jobs = h.jobs || {};
             h.state = h.state || {};
@@ -519,6 +520,7 @@ module.exports.networkscanner = function (parent) {
 
         onTabShown: function () {
             var h = pluginHandler.networkscanner;
+            setTimeout(h.fitHeight, 0);
             if (typeof currentNode === 'undefined' || !currentNode) return;
             var st = h.stateOf(currentNode._id);
             if (!st.ifRequested && (currentNode.conn & 1)) h.loadInterfaces();
@@ -712,7 +714,7 @@ module.exports.networkscanner = function (parent) {
             if (!node.agent) {
                 html = '<div style="padding:8px">Ennek az eszköznek nincs Mesh Agentje, a hálózatvizsgálat nem futtatható.</div>';
             } else {
-                html = '<div id="nsRoot" data-node="' + e(node._id) + '" style="padding:8px">' +
+                html = '<div id="nsRoot" data-node="' + e(node._id) + '" style="padding:8px;overflow-y:auto;box-sizing:border-box">' +
                     '<div style="margin-bottom:10px">A vizsgálat az agent gépéről indul (' + (h.isWindowsNode(node) ? 'Windows / PowerShell' : 'Linux, macOS / Python 3') + ').</div>' +
                     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' +
                     '<label for="nsIface">Hálózati interfész:</label>' +
@@ -738,7 +740,23 @@ module.exports.networkscanner = function (parent) {
                     '</div>';
             }
             QH('pluginNetworkScanner', html);
-            if (node.agent) h.refreshAll(node._id);
+            if (node.agent) { h.refreshAll(node._id); setTimeout(h.fitHeight, 0); }
+        },
+
+        // A MeshCentral eszközpanelje levágja a túllógó tartalmat, ezért a fül saját
+        // görgetősávot kap: a magasságot a látható terület aljához igazítjuk.
+        fitHeight: function () {
+            var root = Q('nsRoot');
+            if (!root || root.offsetParent === null) return;
+            var top = root.getBoundingClientRect().top, bottom = window.innerHeight;
+            for (var el = root.parentElement; el && el !== document.body; el = el.parentElement) {
+                var cs = window.getComputedStyle(el);
+                if (cs.overflowY !== 'visible' || cs.overflow === 'hidden') {
+                    var b = el.getBoundingClientRect().bottom;
+                    if (b > top + 100 && b < bottom) bottom = b;
+                }
+            }
+            root.style.maxHeight = Math.max(250, Math.floor(bottom - top - 8)) + 'px';
         },
 
         // A felület aktuális értékeinek mentése az állapotba.
